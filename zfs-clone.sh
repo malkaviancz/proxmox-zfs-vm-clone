@@ -11,6 +11,13 @@ CONF="/etc/pve/qemu-server/$VMID.conf"
 [ ! -f "$CONF" ] && echo "ERROR: VM $VMID not found" && exit 1
 qm status $VMID | grep -q running && echo "ERROR: VM $VMID is running" && exit 1
 
+# Try qm rollback first; on non-zero exit nothing was mutated, fall through.
+if qm rollback $VMID $SNAP; then
+    echo "INFO: qm rollback succeeded"
+    exit 0
+fi
+echo "INFO: qm rollback declined; falling back to clone path"
+
 SUFFIX=$(date +%Y%m%d%H%M%S)
 
 BASE_ZVOLS=$(qm config $VMID --snapshot $SNAP | grep -E "^(ide|sata|scsi|virtio|efidisk|tpmstate)[0-9]+:" | grep -oE "\bvm-$VMID-disk-[0-9]+\b" | sort -u)

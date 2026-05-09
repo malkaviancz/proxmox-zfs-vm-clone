@@ -12,6 +12,7 @@ The VM must be stopped before running.
 
 ## Design Decisions
 
+- **Try `qm rollback` first**: invoke `qm rollback <vmid> <snap>` before any clone logic; on non-zero exit fall through to the clone path. PVE pre-validates every disk (refuses non-leaf via `volume_rollback_is_possible`, atomic across disks) so a non-zero exit means no mutation occurred. Works the same for cloned disks since PVE's per-volid snapshot listing excludes the origin.
 - **Branch via `zfs clone`**: snapshot → new disk; update VM conf to reference it.
 - **Coexists with Proxmox UI**: taking/deleting snapshots from the Proxmox web UI continues to work normally. Use this script only when branching from a historical snapshot.
 - **No `zfs promote`**: avoids disrupting snapshot ownership in clone chains.
