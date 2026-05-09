@@ -24,6 +24,9 @@ for BASE_ZVOL in $BASE_ZVOLS; do
     zfs list -H -o name | grep -q "/$BASE_ZVOL\.$SUFFIX$" && echo "ERROR: $BASE_ZVOL.$SUFFIX already exists" && exit 1
 done
 
+# Capture suffix-named disks in current VM section before rewrite (orphan disk candidates)
+ORPHAN_ZVOLS=$(qm config $VMID | grep -E "^(ide|sata|scsi|virtio|efidisk|tpmstate)[0-9]+:" | grep -oE "\bvm-$VMID-disk-[0-9]+\.[0-9]{14}\b" | sort -u)
+
 # Execution: clone each disk, update disk refs in current VM section only
 for BASE_ZVOL in $BASE_ZVOLS; do
     SRC_ZVOL=$(zfs list -H -o name -t snap | grep -E "/$BASE_ZVOL(\.[0-9]{14})?@$SNAP$" | sed 's/@.*//')
@@ -39,5 +42,15 @@ done
 echo "INFO: setting parent: $SNAP"
 sed -i "0,/^\[/{/^parent:/d}" $CONF
 sed -i "1s/^/parent: $SNAP\n/" $CONF
+
+# Cleanup: destroy suffix-named disks that are no longer referenced and have no snapshots
+for ORPHAN_ZVOL in $ORPHAN_ZVOLS; do
+    qm config $VMID | grep -q "\b$ORPHAN_ZVOL\b" && continue
+    FQ_ORPHAN_ZVOL=$(zfs list -H -o name | grep "/$ORPHAN_ZVOL$")
+    [ -z "$FQ_ORPHAN_ZVOL" ] && continue
+    [ -n "$(zfs list -H -o name -t snap $FQ_ORPHAN_ZVOL)" ] && continue
+    echo "INFO: destroying orphan disk: $FQ_ORPHAN_ZVOL"
+    zfs destroy "$FQ_ORPHAN_ZVOL"
+done
 
 echo "INFO: done"

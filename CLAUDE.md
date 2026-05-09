@@ -22,9 +22,11 @@ The VM must be stopped before running.
 - **Source disk lookup**: locate via the snapshot itself (`/<disk>(.<suffix>)?@<snap>`), not the base-disk name. This correctly handles chained branches where a disk has multiple `.suffix` variants on disk and the right source is the one that actually owns the snapshot.
 - **Conf writes**: directly edit `/etc/pve/qemu-server/<vmid>.conf`. Disk refs are rewritten only in the **current VM section** (above the first `[snapshot]` block), via a `0,/^\[/` sed range.
 - **`parent: <snapshot>`**: written into the current VM section so the Proxmox UI shows the branch point correctly. Existing `parent:` line in that section is removed first, then a fresh one is inserted at the top.
+- **Orphan disk cleanup**: after a successful branch, suffix-named disks (`vm-<vmid>-disk-<n>.<14-digit-datetime>`) that the current VM section no longer references and that have no ZFS snapshots are destroyed. Reliance on the datetime suffix - only ever produced by this script - keeps base/hand-named disks safe. Cleanup runs only after the main branching succeeds, so a mid-run failure leaves disk state untouched. Anything matching that naming pattern on disk should be assumed disposable by this script.
 - **VM must be stopped** before branching.
 - **Style**: prefer `grep -E` (avoid `-P` unless PCRE is genuinely needed); avoid unnecessary escapes; no optional/sugar shell syntax.
 - **Disk-name boundaries**: every regex consuming `vm-<vmid>-disk-<n>` enforces explicit boundaries to avoid `disk-1` matching inside `disk-10`. Either via surrounding literals (`/…@`, `/…\.<suffix>$`) or via `\b` on both sides (disk extraction and conf rewrite).
+- **Orphan-check regex hardening gap**: the orphan-cleanup checks interpolate `$ORPHAN_ZVOL` (e.g. `vm-100-disk-0.20251101010101`) directly into the grep pattern without escaping the `.` in the `.<14-digit>` suffix - so the dot acts as the regex any-char metacharacter rather than matching a literal `.`. Harmless in practice because no real disk name produced by `qm`/`zfs` collides via this any-char meaning, but a hardened version would precompute `ORPHAN_ZVOL_RE="${ORPHAN_ZVOL//./\\.}"` and interpolate that escaped value into the regex.
 
 ## Assumptions about input
 
